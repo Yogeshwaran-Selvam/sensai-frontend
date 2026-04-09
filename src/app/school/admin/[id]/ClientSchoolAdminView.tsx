@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Header } from "@/components/layout/header";
-import { Edit, Save, Users, BookOpen, Layers, Building, ChevronDown, Trash2, ExternalLink } from "lucide-react";
+import { Edit, Save, Users, BookOpen, Layers, Building, ChevronDown, Trash2, ExternalLink, Briefcase, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -42,6 +42,18 @@ export default function ClientSchoolAdminView({ id }: { id: string }) {
     const [isCreateCourseDialogOpen, setIsCreateCourseDialogOpen] = useState(false);
     const [memberToDelete, setMemberToDelete] = useState<TeamMember | null>(null);
     const schoolNameRef = useRef<HTMLHeadingElement>(null);
+
+    // State for job descriptions
+    interface JobDescription {
+        title: string;
+        description: string;
+        responsibilities: string[];
+        skills: string[];
+    }
+    const [jobDescriptions, setJobDescriptions] = useState<JobDescription[]>([]);
+    const [loadingJDs, setLoadingJDs] = useState(false);
+    const [jdError, setJdError] = useState<string | null>(null);
+
     // Add state for selected members
     const [selectedMembers, setSelectedMembers] = useState<TeamMember[]>([]);
     // Add state for toast notifications
@@ -134,6 +146,34 @@ export default function ClientSchoolAdminView({ id }: { id: string }) {
 
         fetchSchool();
     }, [id, router]);
+
+    // Fetch job descriptions when courses are loaded
+    useEffect(() => {
+        if (!school?.courses?.length) return;
+
+        const fetchJobDescriptions = async () => {
+            setLoadingJDs(true);
+            setJdError(null);
+            try {
+                const response = await fetch(
+                    `${process.env.NEXT_PUBLIC_BACKEND_URL}/organizations/${id}/job-descriptions`
+                );
+                if (response.ok) {
+                    const data = await response.json();
+                    setJobDescriptions(data.jobs || []);
+                } else {
+                    const errorData = await response.json().catch(() => null);
+                    setJdError(errorData?.detail || null);
+                }
+            } catch (error) {
+                console.error("Failed to fetch job descriptions:", error);
+            } finally {
+                setLoadingJDs(false);
+            }
+        };
+
+        fetchJobDescriptions();
+    }, [school?.courses, id]);
 
     // Keep browser tab title in sync with the current school name (admin side)
     useEffect(() => {
@@ -625,6 +665,83 @@ export default function ClientSchoolAdminView({ id }: { id: string }) {
                                                         onDelete={handleCourseDelete}
                                                     />
                                                 ))}
+                                            </div>
+
+                                            {/* Job Descriptions Section */}
+                                            <div className="mt-12">
+                                                <div className="flex items-center mb-6">
+                                                    <Briefcase size={20} className="mr-2 text-purple-600 dark:text-purple-400" />
+                                                    <h3 className="text-xl font-light text-black dark:text-white">
+                                                        Job Descriptions
+                                                    </h3>
+                                                    <span className="ml-3 text-sm text-gray-500 dark:text-gray-400">
+                                                        Based on your top courses
+                                                    </span>
+                                                </div>
+
+                                                {loadingJDs && (
+                                                    <div className="flex items-center justify-center py-12">
+                                                        <Loader2 size={24} className="animate-spin text-purple-500 mr-3" />
+                                                        <span className="text-gray-500 dark:text-gray-400">Generating job descriptions...</span>
+                                                    </div>
+                                                )}
+
+                                                {!loadingJDs && jdError && (
+                                                    <p className="text-sm text-gray-500 dark:text-gray-400 py-4">
+                                                        {jdError}
+                                                    </p>
+                                                )}
+
+                                                {!loadingJDs && jobDescriptions.length > 0 && (
+                                                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                                        {jobDescriptions.map((jd, idx) => (
+                                                            <div
+                                                                key={idx}
+                                                                className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-6 flex flex-col"
+                                                            >
+                                                                <div className="flex items-start mb-3">
+                                                                    <Briefcase size={18} className="mr-2 mt-0.5 text-purple-500 dark:text-purple-400 flex-shrink-0" />
+                                                                    <h4 className="text-lg font-medium text-black dark:text-white">
+                                                                        {jd.title}
+                                                                    </h4>
+                                                                </div>
+                                                                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                                                                    {jd.description}
+                                                                </p>
+
+                                                                <div className="mb-4">
+                                                                    <h5 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
+                                                                        Responsibilities
+                                                                    </h5>
+                                                                    <ul className="space-y-1">
+                                                                        {jd.responsibilities.map((r, i) => (
+                                                                            <li key={i} className="text-sm text-gray-700 dark:text-gray-300 flex items-start">
+                                                                                <span className="mr-2 text-purple-500">-</span>
+                                                                                {r}
+                                                                            </li>
+                                                                        ))}
+                                                                    </ul>
+                                                                </div>
+
+                                                                <div className="mt-auto">
+                                                                    <h5 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
+                                                                        Required Skills
+                                                                    </h5>
+                                                                    <div className="flex flex-wrap gap-1.5">
+                                                                        {jd.skills.map((skill, i) => (
+                                                                            <span
+                                                                                key={i}
+                                                                                className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
+                                                                            >
+                                                                                {skill}
+                                                                            </span>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
                                             </div>
                                         </>
                                     ) : (

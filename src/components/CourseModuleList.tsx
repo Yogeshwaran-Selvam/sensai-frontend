@@ -273,6 +273,9 @@ export default function CourseModuleList({
     // State to track task duplication in progress
     const [duplicatingTaskId, setDuplicatingTaskId] = useState<string | null>(null);
 
+    // State for keyword display
+    const [moduleKeywords, setModuleKeywords] = useState<Record<string, string[]>>({});
+
     // Update completedItems when completedTaskIds changes
     useEffect(() => {
         // Only update the state if the values are actually different
@@ -531,6 +534,33 @@ export default function CourseModuleList({
     };
 
     // Handle module click based on mode
+    const handleFetchKeywords = async (moduleId: string) => {
+        if (!courseId) return;
+        try {
+            const response = await fetch(
+                `${process.env.NEXT_PUBLIC_BACKEND_URL}/courses/${courseId}/milestones/${moduleId}/keywords`
+            );
+            if (response.ok) {
+                const data = await response.json();
+                if (data.keywords && data.keywords.length > 0) {
+                    setModuleKeywords((prev) => ({ ...prev, [moduleId]: data.keywords }));
+                }
+            }
+        } catch (error) {
+            console.error("Failed to fetch keywords:", error);
+        }
+    };
+
+    // Fetch existing keywords when modules expand in edit mode
+    useEffect(() => {
+        if (mode !== 'edit') return;
+        modules.forEach((module) => {
+            if (getIsExpanded(module.id) && !moduleKeywords[module.id]) {
+                handleFetchKeywords(module.id);
+            }
+        });
+    }, [modules, expandedModules, mode]);
+
     const handleModuleClick = (e: React.MouseEvent, moduleId: string) => {
         // Find the module
         const module = modules.find(m => m.id === moduleId);
@@ -1181,6 +1211,26 @@ export default function CourseModuleList({
                                                         Assignment
                                                     </button>
                                                 </Tooltip>
+                                            </div>
+                                        )}
+
+                                        {/* Keywords display - only in edit mode */}
+                                        {mode === 'edit' && moduleKeywords[module.id]?.length > 0 && (
+                                            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                                                <div className="flex items-center mb-2">
+                                                    <Brain size={14} className="mr-1.5 text-amber-600 dark:text-amber-400" />
+                                                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Keywords</span>
+                                                </div>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {moduleKeywords[module.id].map((keyword, idx) => (
+                                                        <span
+                                                            key={idx}
+                                                            className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 border border-gray-200 dark:border-gray-700"
+                                                        >
+                                                            {keyword}
+                                                        </span>
+                                                    ))}
+                                                </div>
                                             </div>
                                         )}
                                     </div>
