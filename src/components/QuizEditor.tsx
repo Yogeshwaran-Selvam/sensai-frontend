@@ -38,6 +38,9 @@ import { validateScorecardCriteria as validateScorecardCriteriaUtil, ValidationC
 // Add import for NotionIntegration
 import NotionIntegration from "./NotionIntegration";
 
+// Import Bloom's Taxonomy Generator
+import BloomsTaxonomyGenerator from "./BloomsTaxonomyGenerator";
+
 // Add imports for Notion rendering
 import { BlockList, RenderConfig } from "@udus/notion-renderer/components";
 import "@udus/notion-renderer/styles/globals.css";
@@ -164,6 +167,10 @@ const QuizEditor = forwardRef<QuizEditorHandle, QuizEditorProps>(({
     const [isLoadingIntegration, setIsLoadingIntegration] = useState(false);
     const [integrationError, setIntegrationError] = useState<string | null>(null);
 
+    // Bloom's Taxonomy Generator state
+    const [showBloomsGenerator, setShowBloomsGenerator] = useState(false);
+    const [courseMilestones, setCourseMilestones] = useState<Array<{ id: string; name: string; learning_material_count: number }>>([]);
+
     // Add useEffect to automatically hide toast after 5 seconds
     useEffect(() => {
         if (showToast) {
@@ -182,6 +189,25 @@ const QuizEditor = forwardRef<QuizEditorHandle, QuizEditorProps>(({
             setQuestions([]);
         }
     }, [status]);
+
+    // Fetch course milestones for Bloom's Taxonomy Generator
+    useEffect(() => {
+        if (courseId) {
+            fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/courses/${courseId}`)
+                .then(res => res.ok ? res.json() : null)
+                .then(data => {
+                    if (data?.milestones) {
+                        const mils = data.milestones.map((m: any) => ({
+                            id: String(m.id),
+                            name: m.name,
+                            learning_material_count: (m.tasks || []).filter((t: any) => t.type === 'learning_material').length
+                        }));
+                        setCourseMilestones(mils);
+                    }
+                })
+                .catch(err => console.error('Error fetching milestones for Blooms:', err));
+        }
+    }, [courseId]);
 
     // Fetch school scorecards when component mounts for draft quizzes
     useEffect(() => {
@@ -848,6 +874,77 @@ const QuizEditor = forwardRef<QuizEditorHandle, QuizEditorProps>(({
     }, [questions, currentQuestionIndex, onChange, status]);
 
 
+
+    // Handle adding Bloom's Taxonomy generated questions
+    const handleBloomsQuestionsAdd = useCallback((bloomsQuestions: any[]) => {
+        const newQuizQuestions: QuizQuestion[] = bloomsQuestions.map((bq, idx) => {
+            // Convert the generated question into a BlockNote content block
+            let questionContent = [
+                {
+                    type: "paragraph",
+                    content: [{ type: "text", text: bq.question_text, styles: {} }],
+                },
+            ];
+
+            // For MCQ, add option list as part of the question content
+            if (bq.options && bq.options.length > 0) {
+                bq.options.forEach((opt: string) => {
+                    questionContent.push({
+                        type: "paragraph" as const,
+                        content: [{ type: "text", text: opt, styles: {} }],
+                    } as any);
+                });
+            }
+
+            // Build the correct answer block
+            const correctAnswerBlocks = [
+                {
+                    type: "paragraph",
+                    content: [
+                        {
+                            type: "text",
+                            text: bq.correct_answer + (bq.explanation ? `\n\nExplanation: ${bq.explanation}` : ""),
+                            styles: {},
+                        },
+                    ],
+                },
+            ];
+
+            const levelLabel = bq.blooms_level.charAt(0).toUpperCase() + bq.blooms_level.slice(1);
+
+            return {
+                id: `bloom-${Date.now()}-${idx}`,
+                content: questionContent,
+                config: {
+                    ...defaultQuestionConfig,
+                    questionType: (bq.question_type === "subjective" ? "subjective" : "objective") as 'objective' | 'subjective',
+                    inputType: 'text' as const,
+                    responseType: 'chat' as const,
+                    correctAnswer: correctAnswerBlocks,
+                    title: `[${levelLabel}] ${bq.question_text.substring(0, 60)}${bq.question_text.length > 60 ? '...' : ''}`,
+                    settings: { allowCopyPaste: true },
+                },
+            };
+        });
+
+        const updatedQuestions = [...questions, ...newQuizQuestions];
+        setQuestions(updatedQuestions);
+        setCurrentQuestionIndex(updatedQuestions.length - newQuizQuestions.length);
+
+        // Trigger animation
+        setNewQuestionAdded(true);
+        setQuestionCountHighlighted(true);
+
+        if (onChange) {
+            onChange(updatedQuestions);
+        }
+
+        // Show toast
+        setToastTitle("Questions Generated");
+        setToastMessage(`${newQuizQuestions.length} Bloom's Taxonomy questions added as draft!`);
+        setToastEmoji("🧠");
+        setShowToast(true);
+    }, [questions, onChange]);
 
     // Add a new question
     const addQuestion = useCallback(() => {
@@ -1771,6 +1868,15 @@ const QuizEditor = forwardRef<QuizEditorHandle, QuizEditorProps>(({
                 errorMessage={publishError}
             />
 
+            {/* Bloom's Taxonomy Generator Dialog */}
+            <BloomsTaxonomyGenerator
+                open={showBloomsGenerator}
+                onClose={() => setShowBloomsGenerator(false)}
+                onAddQuestions={handleBloomsQuestionsAdd}
+                courseId={courseId || ''}
+                milestones={courseMilestones}
+            />
+
             {/* Loading indicator */}
             {isLoadingQuestions && (
                 <div className="absolute inset-0 z-10 flex items-center justify-center bg-white bg-opacity-80 dark:bg-[#1A1A1A] dark:bg-opacity-80">
@@ -1813,7 +1919,7 @@ const QuizEditor = forwardRef<QuizEditorHandle, QuizEditorProps>(({
 
                                     {/* Add Question Button */}
                                     {!readOnly && status === 'draft' && (
-                                        <div className="p-3">
+                                        <div className="p-3 space-y-2">
                                             <button
                                                 onClick={addQuestion}
                                                 className="w-full flex items-center justify-center px-4 py-2 text-sm rounded-md transition-colors cursor-pointer disabled:cursor-not-allowed text-white bg-blue-600 hover:bg-blue-700 dark:text-black dark:bg-white dark:hover:bg-gray-100"
@@ -1824,6 +1930,16 @@ const QuizEditor = forwardRef<QuizEditorHandle, QuizEditorProps>(({
                                                 </div>
                                                 Add question
                                             </button>
+                                            {/* Bloom's Taxonomy Generator Button */}
+                                            {courseId && courseMilestones.length > 0 && (
+                                                <button
+                                                    onClick={() => setShowBloomsGenerator(true)}
+                                                    className="w-full flex items-center justify-center px-4 py-2 text-sm rounded-md transition-colors cursor-pointer bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white shadow-sm"
+                                                >
+                                                    <Sparkles size={14} className="mr-2" />
+                                                    Bloom&apos;s Taxonomy
+                                                </button>
+                                            )}
                                         </div>
                                     )}
 
