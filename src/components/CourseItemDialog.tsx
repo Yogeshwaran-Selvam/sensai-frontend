@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useEffect, useState } from "react";
-import { Check, X, Pencil, Eye, Edit2, Zap } from "lucide-react";
+import { Check, X, Pencil, Eye, Edit2, Zap, Sparkles } from "lucide-react";
+import QuizGenerationWizard from "@/components/QuizGenerationWizard";
 import dynamic from "next/dynamic";
 import { QuizQuestion } from "../types";
 import type { LearningMaterialEditorHandle } from "./LearningMaterialEditor";
@@ -76,6 +77,8 @@ interface CourseItemDialogProps {
     focusEditor: () => void;
     schoolId?: string; // School ID for fetching scorecards
     courseId?: string; // Add courseId prop for learning materials
+    courseTitle?: string; // Course title for quiz generation
+    moduleTitle?: string; // Active module title for quiz generation
 }
 
 const CourseItemDialog: React.FC<CourseItemDialogProps> = ({
@@ -100,6 +103,8 @@ const CourseItemDialog: React.FC<CourseItemDialogProps> = ({
     focusEditor,
     schoolId,
     courseId,
+    courseTitle,
+    moduleTitle,
 }) => {
     // Add refs for the editor components
     const learningMaterialEditorRef = useRef<LearningMaterialEditorHandle>(null);
@@ -136,6 +141,9 @@ const CourseItemDialog: React.FC<CourseItemDialogProps> = ({
 
     // State to track if quiz has questions (for publish/preview button visibility)
     const [hasQuizQuestions, setHasQuizQuestions] = useState(false);
+
+    // State for Quiz Generation Wizard
+    const [showQuizWizard, setShowQuizWizard] = useState(false);
 
     // Add state for unsaved scorecard confirmation dialog
     const [showUnsavedScorecardConfirmation, setShowUnsavedScorecardConfirmation] = useState(false);
@@ -1321,6 +1329,27 @@ const CourseItemDialog: React.FC<CourseItemDialogProps> = ({
                 description={toastDescription}
                 emoji={toastEmoji}
                 onClose={() => setShowToast(false)}
+            />
+
+            {/* Floating Action Button - Quiz Generation Wizard (quiz type only) */}
+            {activeItem?.type === 'quiz' && !showToast && !showQuizWizard && (
+                <button
+                    className="fixed bottom-8 right-8 z-[60] flex items-center gap-2 px-5 py-3 bg-purple-600 text-white text-sm font-medium rounded-full hover:bg-purple-500 transition-all shadow-lg shadow-purple-600/30 cursor-pointer"
+                    onClick={() => setShowQuizWizard(true)}
+                >
+                    <Sparkles size={16} />
+                    Generate Quiz
+                </button>
+            )}
+
+            {/* Quiz Generation Wizard drawer */}
+            <QuizGenerationWizard
+                open={showQuizWizard}
+                onClose={() => setShowQuizWizard(false)}
+                courseId={Number(courseId)}
+                orgId={Number(schoolId)}
+                courseTitle={courseTitle}
+                moduleTitle={moduleTitle}
             />
         </>
     );

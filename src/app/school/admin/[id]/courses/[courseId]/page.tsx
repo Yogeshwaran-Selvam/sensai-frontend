@@ -2077,6 +2077,7 @@ export default function CreateCourse() {
                             onQuestionChange={handleQuestionChange}
                             schoolId={schoolId}
                             courseId={courseId}
+                            courseTitle={courseTitle}
                             onDuplicateItem={handleDuplicateItem}
                         />
                     </div>
@@ -2300,6 +2301,10 @@ export default function CreateCourse() {
                 onClose={() => setShowGenerateDialog(false)}
                 onSubmit={handleGenerateCourse}
             />
+
+            {/* NOTE: The Quiz Generation Wizard FAB lives inside CourseItemDialog
+                     for quiz tasks. It is rendered there with z-[60] to sit above
+                     the full-screen dialog overlay (z-50). */}
 
             {/* Add SettingsDialog component */}
             <SettingsDialog
