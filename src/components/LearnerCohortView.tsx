@@ -5,8 +5,9 @@ import TopPerformers from "./TopPerformers";
 import { Module } from "@/types/course";
 import { useAuth } from "@/lib/auth";
 import { Course, Cohort } from "@/types";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Shield } from "lucide-react";
 import MobileDropdown, { DropdownOption } from "./MobileDropdown";
+import BelieverMode from "./BelieverMode";
 
 // Constants for localStorage keys
 const LAST_INCREMENT_DATE_KEY = 'streak_last_increment_date';
@@ -54,7 +55,7 @@ export default function LearnerCohortView({
     activeCourseIndex = 0,
     taskId = null,
     questionId = null,
-    onUpdateTaskAndQuestionIdInUrl = () => {},
+    onUpdateTaskAndQuestionIdInUrl = () => { },
 }: LearnerCohortViewProps) {
     // Add state to manage completed tasks and questions
     const [localCompletedTaskIds, setLocalCompletedTaskIds] = useState<Record<string, boolean>>(completedTaskIds);
@@ -69,6 +70,9 @@ export default function LearnerCohortView({
 
     // State for the active mobile tab
     const [activeMobileTab, setActiveMobileTab] = useState<MobileTab>(MobileTab.Course);
+
+    // Believer Mode state
+    const [showBelieverMode, setShowBelieverMode] = useState(false);
 
     // Refs for course tab scrolling functionality
     const courseTabRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -415,6 +419,19 @@ export default function LearnerCohortView({
 
                     {/* Course Content */}
                     <div>
+                        {/* Believer Mode Practice Button */}
+                        {getActiveCourse() && modules.length > 0 && (
+                            <div className="mb-4 flex justify-end">
+                                <button
+                                    onClick={() => setShowBelieverMode(true)}
+                                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 transition-all shadow-md shadow-emerald-500/20"
+                                >
+                                    <Shield size={14} />
+                                    Practice (Believer Mode)
+                                </button>
+                            </div>
+                        )}
+
                         <LearnerCourseView
                             modules={modules}
                             completedTaskIds={localCompletedTaskIds}
@@ -427,6 +444,18 @@ export default function LearnerCohortView({
                             onUpdateTaskAndQuestionIdInUrl={onUpdateTaskAndQuestionIdInUrl}
                         />
                     </div>
+
+                    {/* Believer Mode Dialog */}
+                    <BelieverMode
+                        open={showBelieverMode}
+                        onClose={() => setShowBelieverMode(false)}
+                        courseId={String(getActiveCourse()?.id || '')}
+                        milestones={modules.map(m => ({
+                            id: String(m.id),
+                            name: m.title,
+                            learning_material_count: m.items.filter(i => i.type === 'material').length,
+                        }))}
+                    />
                 </div>
 
                 {/* Right Column: Streak and Performers */}
