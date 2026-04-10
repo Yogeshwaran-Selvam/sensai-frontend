@@ -38,9 +38,6 @@ import { validateScorecardCriteria as validateScorecardCriteriaUtil, ValidationC
 // Add import for NotionIntegration
 import NotionIntegration from "./NotionIntegration";
 
-// Import Bloom's Taxonomy Generator
-import BloomsTaxonomyGenerator from "./BloomsTaxonomyGenerator";
-
 // Add imports for Notion rendering
 import { BlockList, RenderConfig } from "@udus/notion-renderer/components";
 import "@udus/notion-renderer/styles/globals.css";
@@ -171,6 +168,9 @@ const QuizEditor = forwardRef<QuizEditorHandle, QuizEditorProps>(({
     const [showBloomsGenerator, setShowBloomsGenerator] = useState(false);
     const [courseMilestones, setCourseMilestones] = useState<Array<{ id: string; name: string; learning_material_count: number }>>([]);
 
+    // Scenario Mode Generator state
+    const [showScenarioGenerator, setShowScenarioGenerator] = useState(false);
+
     // Add useEffect to automatically hide toast after 5 seconds
     useEffect(() => {
         if (showToast) {
@@ -182,13 +182,6 @@ const QuizEditor = forwardRef<QuizEditorHandle, QuizEditorProps>(({
             return () => clearTimeout(timer);
         }
     }, [showToast]);
-
-    // Make sure we reset questions when component mounts for draft quizzes
-    useEffect(() => {
-        if (status === 'draft') {
-            setQuestions([]);
-        }
-    }, [status]);
 
     // Fetch course milestones for Bloom's Taxonomy Generator
     useEffect(() => {
@@ -208,6 +201,14 @@ const QuizEditor = forwardRef<QuizEditorHandle, QuizEditorProps>(({
                 .catch(err => console.error('Error fetching milestones for Blooms:', err));
         }
     }, [courseId]);
+
+    // Make sure we reset questions when component mounts for draft quizzes
+    useEffect(() => {
+        if (status === 'draft') {
+            setQuestions([]);
+        }
+    }, [status]);
+
 
     // Fetch school scorecards when component mounts for draft quizzes
     useEffect(() => {
@@ -1108,6 +1109,74 @@ const QuizEditor = forwardRef<QuizEditorHandle, QuizEditorProps>(({
         }
     }, [questions]);
 
+    // Handle adding Scenario Mode generated questions
+    const handleScenarioQuestionsAdd = useCallback((scenarioQuestions: any[], scenarioNarrative: string, scenarioTitle: string) => {
+        const newQuizQuestions: QuizQuestion[] = scenarioQuestions.map((sq, idx) => {
+            // Build the question content block — prepend a short scenario context note
+            let questionContent = [
+                {
+                    type: "paragraph",
+                    content: [{ type: "text", text: sq.question_text, styles: {} }],
+                },
+            ];
+
+            // For MCQ, add option list
+            if (sq.options && sq.options.length > 0) {
+                sq.options.forEach((opt: string) => {
+                    questionContent.push({
+                        type: "paragraph" as const,
+                        content: [{ type: "text", text: opt, styles: {} }],
+                    } as any);
+                });
+            }
+
+            // Build the correct answer block
+            const correctAnswerBlocks = [
+                {
+                    type: "paragraph",
+                    content: [
+                        {
+                            type: "text",
+                            text: sq.correct_answer + (sq.explanation ? `\n\nExplanation: ${sq.explanation}` : ""),
+                            styles: {},
+                        },
+                    ],
+                },
+            ];
+
+            return {
+                id: `scenario-${Date.now()}-${idx}`,
+                content: questionContent,
+                config: {
+                    ...defaultQuestionConfig,
+                    questionType: (sq.question_type === "subjective" ? "subjective" : "objective") as 'objective' | 'subjective',
+                    inputType: 'text' as const,
+                    responseType: 'chat' as const,
+                    correctAnswer: correctAnswerBlocks,
+                    title: `[Scenario] ${sq.question_text.substring(0, 55)}${sq.question_text.length > 55 ? '...' : ''}`,
+                    settings: { allowCopyPaste: true },
+                },
+            };
+        });
+
+        const updatedQuestions = [...questions, ...newQuizQuestions];
+        setQuestions(updatedQuestions);
+        setCurrentQuestionIndex(updatedQuestions.length - newQuizQuestions.length);
+
+        // Trigger animation
+        setNewQuestionAdded(true);
+        setQuestionCountHighlighted(true);
+
+        if (onChange) {
+            onChange(updatedQuestions);
+        }
+
+        // Show toast
+        setToastTitle("Scenario Questions Generated");
+        setToastMessage(`${newQuizQuestions.length} scenario-based questions added as draft!`);
+        setToastEmoji("🎭");
+        setShowToast(true);
+    }, [questions, onChange]);
     // Add a new question
     const addQuestion = useCallback(() => {
         if (checkUnsavedScorecardChanges()) {
@@ -2031,15 +2100,6 @@ const QuizEditor = forwardRef<QuizEditorHandle, QuizEditorProps>(({
                 errorMessage={publishError}
             />
 
-            {/* Bloom's Taxonomy Generator Dialog */}
-            <BloomsTaxonomyGenerator
-                open={showBloomsGenerator}
-                onClose={() => setShowBloomsGenerator(false)}
-                onAddQuestions={handleBloomsQuestionsAdd}
-                courseId={courseId || ''}
-                milestones={courseMilestones}
-            />
-
             {/* Loading indicator */}
             {isLoadingQuestions && (
                 <div className="absolute inset-0 z-10 flex items-center justify-center bg-white bg-opacity-80 dark:bg-[#1A1A1A] dark:bg-opacity-80">
@@ -2101,6 +2161,15 @@ const QuizEditor = forwardRef<QuizEditorHandle, QuizEditorProps>(({
                                                 >
                                                     <Sparkles size={14} className="mr-2" />
                                                     Bloom&apos;s Taxonomy
+                                                </button>
+                                            )}
+                                            {courseId && courseMilestones.length > 0 && (
+                                                <button
+                                                    onClick={() => setShowScenarioGenerator(true)}
+                                                    className="w-full flex items-center justify-center px-4 py-2 text-sm rounded-md transition-colors cursor-pointer bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white shadow-sm"
+                                                >
+                                                    <Sparkles size={14} className="mr-2" />
+                                                    Scenario Mode
                                                 </button>
                                             )}
                                         </div>

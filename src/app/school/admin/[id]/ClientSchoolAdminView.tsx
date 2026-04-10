@@ -25,7 +25,7 @@ interface School {
     members: TeamMember[];
 }
 
-type TabType = 'courses' | 'cohorts' | 'members';
+type TabType = 'courses' | 'cohorts' | 'members' | 'curate_assessment';
 
 export default function ClientSchoolAdminView({ id }: { id: string }) {
     const router = useRouter();
@@ -80,7 +80,7 @@ export default function ClientSchoolAdminView({ id }: { id: string }) {
     useEffect(() => {
         // Check if there's a hash in the URL
         const hash = window.location.hash.replace('#', '');
-        if (hash === 'cohorts' || hash === 'members') {
+        if (hash === 'cohorts' || hash === 'members' || hash === 'curate_assessment') {
             setActiveTab(hash as TabType);
         }
     }, []);
@@ -634,6 +634,19 @@ export default function ClientSchoolAdminView({ id }: { id: string }) {
                                         Team
                                     </div>
                                 </button>
+                                <button
+                                    className={`px-4 py-2 font-light cursor-pointer ${
+                                        activeTab === 'curate_assessment'
+                                            ? 'text-black dark:text-white border-b-2 border-black dark:border-white'
+                                            : 'text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white'
+                                    }`}
+                                    onClick={() => handleTabChange('curate_assessment')}
+                                >
+                                    <div className="flex items-center">
+                                        <Briefcase size={16} className="mr-2" />
+                                        Curate Assessment
+                                    </div>
+                                </button>
                             </div>
                         </div>
 
@@ -667,82 +680,7 @@ export default function ClientSchoolAdminView({ id }: { id: string }) {
                                                 ))}
                                             </div>
 
-                                            {/* Job Descriptions Section */}
-                                            <div className="mt-12">
-                                                <div className="flex items-center mb-6">
-                                                    <Briefcase size={20} className="mr-2 text-purple-600 dark:text-purple-400" />
-                                                    <h3 className="text-xl font-light text-black dark:text-white">
-                                                        Job Descriptions
-                                                    </h3>
-                                                    <span className="ml-3 text-sm text-gray-500 dark:text-gray-400">
-                                                        Based on your top courses
-                                                    </span>
-                                                </div>
 
-                                                {loadingJDs && (
-                                                    <div className="flex items-center justify-center py-12">
-                                                        <Loader2 size={24} className="animate-spin text-purple-500 mr-3" />
-                                                        <span className="text-gray-500 dark:text-gray-400">Generating job descriptions...</span>
-                                                    </div>
-                                                )}
-
-                                                {!loadingJDs && jdError && (
-                                                    <p className="text-sm text-gray-500 dark:text-gray-400 py-4">
-                                                        {jdError}
-                                                    </p>
-                                                )}
-
-                                                {!loadingJDs && jobDescriptions.length > 0 && (
-                                                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                                        {jobDescriptions.map((jd, idx) => (
-                                                            <div
-                                                                key={idx}
-                                                                className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-6 flex flex-col"
-                                                            >
-                                                                <div className="flex items-start mb-3">
-                                                                    <Briefcase size={18} className="mr-2 mt-0.5 text-purple-500 dark:text-purple-400 flex-shrink-0" />
-                                                                    <h4 className="text-lg font-medium text-black dark:text-white">
-                                                                        {jd.title}
-                                                                    </h4>
-                                                                </div>
-                                                                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                                                                    {jd.description}
-                                                                </p>
-
-                                                                <div className="mb-4">
-                                                                    <h5 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
-                                                                        Responsibilities
-                                                                    </h5>
-                                                                    <ul className="space-y-1">
-                                                                        {jd.responsibilities.map((r, i) => (
-                                                                            <li key={i} className="text-sm text-gray-700 dark:text-gray-300 flex items-start">
-                                                                                <span className="mr-2 text-purple-500">-</span>
-                                                                                {r}
-                                                                            </li>
-                                                                        ))}
-                                                                    </ul>
-                                                                </div>
-
-                                                                <div className="mt-auto">
-                                                                    <h5 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
-                                                                        Required Skills
-                                                                    </h5>
-                                                                    <div className="flex flex-wrap gap-1.5">
-                                                                        {jd.skills.map((skill, i) => (
-                                                                            <span
-                                                                                key={i}
-                                                                                className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
-                                                                            >
-                                                                                {skill}
-                                                                            </span>
-                                                                        ))}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </div>
                                         </>
                                     ) : (
                                         <div className="flex flex-col items-center justify-center py-20">
@@ -754,6 +692,93 @@ export default function ClientSchoolAdminView({ id }: { id: string }) {
                                             >
                                                 Create course
                                             </button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Curate Assessment Tab */}
+                            {activeTab === 'curate_assessment' && (
+                                <div>
+                                    {/* Job Descriptions Section */}
+                                    <div className="flex items-center mb-6">
+                                        <Briefcase size={20} className="mr-2 text-purple-600 dark:text-purple-400" />
+                                        <h3 className="text-xl font-light text-black dark:text-white">
+                                            Job Descriptions
+                                        </h3>
+                                        <span className="ml-3 text-sm text-gray-500 dark:text-gray-400">
+                                            Based on your top courses
+                                        </span>
+                                    </div>
+
+                                    {loadingJDs && (
+                                        <div className="flex items-center justify-center py-12">
+                                            <Loader2 size={24} className="animate-spin text-purple-500 mr-3" />
+                                            <span className="text-gray-500 dark:text-gray-400">Generating job descriptions...</span>
+                                        </div>
+                                    )}
+
+                                    {!loadingJDs && jdError && (
+                                        <p className="text-sm text-gray-500 dark:text-gray-400 py-4">
+                                            {jdError}
+                                        </p>
+                                    )}
+
+                                    {!loadingJDs && jobDescriptions.length > 0 && (
+                                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                            {jobDescriptions.map((jd, idx) => (
+                                                <div
+                                                    key={idx}
+                                                    className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-6 flex flex-col"
+                                                >
+                                                    <div className="flex items-start mb-3">
+                                                        <Briefcase size={18} className="mr-2 mt-0.5 text-purple-500 dark:text-purple-400 flex-shrink-0" />
+                                                        <h4 className="text-lg font-medium text-black dark:text-white">
+                                                            {jd.title}
+                                                        </h4>
+                                                    </div>
+                                                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                                                        {jd.description}
+                                                    </p>
+
+                                                    <div className="mb-4">
+                                                        <h5 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
+                                                            Responsibilities
+                                                        </h5>
+                                                        <ul className="space-y-1">
+                                                            {jd.responsibilities.map((r, i) => (
+                                                                <li key={i} className="text-sm text-gray-700 dark:text-gray-300 flex items-start">
+                                                                    <span className="mr-2 text-purple-500">-</span>
+                                                                    {r}
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    </div>
+
+                                                    <div className="mt-auto">
+                                                        <h5 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
+                                                            Required Skills
+                                                        </h5>
+                                                        <div className="flex flex-wrap gap-1.5">
+                                                            {jd.skills.map((skill, i) => (
+                                                                <span
+                                                                    key={i}
+                                                                    className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
+                                                                >
+                                                                    {skill}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {!loadingJDs && !jdError && jobDescriptions.length === 0 && (
+                                        <div className="flex flex-col items-center justify-center py-20">
+                                            <h2 className="text-4xl font-light mb-4">No job descriptions yet</h2>
+                                            <p className="text-gray-600 dark:text-gray-400 mb-8">Add courses with learning materials to auto-generate relevant job descriptions</p>
                                         </div>
                                     )}
                                 </div>

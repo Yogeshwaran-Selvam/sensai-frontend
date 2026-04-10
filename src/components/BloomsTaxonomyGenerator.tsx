@@ -53,6 +53,15 @@ interface BloomsDistribution {
     create: number;
 }
 
+interface AutoBloomsParams {
+    milestoneId?: string;
+    numQuestions: number;
+    difficulty: string;
+    questionTypes: string[];
+    bloomDistribution: BloomsDistribution;
+    learningContent?: string;
+}
+
 interface BloomsTaxonomyGeneratorProps {
     open: boolean;
     onClose: () => void;
@@ -60,6 +69,8 @@ interface BloomsTaxonomyGeneratorProps {
     courseId: string;
     milestoneId?: string;
     milestones: Array<{ id: string; name: string; learning_material_count: number }>;
+    autoStart?: boolean;
+    autoParams?: AutoBloomsParams;
 }
 
 // ============================================================
@@ -92,6 +103,8 @@ export default function BloomsTaxonomyGenerator({
     courseId,
     milestoneId: initialMilestoneId,
     milestones,
+    autoStart = false,
+    autoParams,
 }: BloomsTaxonomyGeneratorProps) {
     // --- State ---
     const [selectedMilestoneId, setSelectedMilestoneId] = useState(
@@ -139,6 +152,14 @@ export default function BloomsTaxonomyGenerator({
             }
         }
     }, [open, initialMilestoneId, milestones]);
+
+    // --- Auto-start when triggered from wizard ---
+    useEffect(() => {
+        if (open && autoStart && autoParams) {
+            handleGenerate(autoParams);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open]);
 
     // --- Slider Logic ---
     const handleSliderChange = useCallback(
@@ -197,8 +218,14 @@ export default function BloomsTaxonomyGenerator({
     }, [generatedQuestions, numQuestions, distribution]);
 
     // --- Generate Assessment ---
-    const handleGenerate = useCallback(async () => {
-        if (!selectedMilestoneId) {
+    const handleGenerate = useCallback(async (override?: AutoBloomsParams) => {
+        const mid = override?.milestoneId || selectedMilestoneId;
+        const nq = override?.numQuestions ?? numQuestions;
+        const diff = override?.difficulty || difficulty;
+        const qt = override?.questionTypes || questionTypes;
+        const dist = override?.bloomDistribution || distribution;
+
+        if (!mid) {
             setError("Please select a module first.");
             return;
         }
@@ -218,11 +245,11 @@ export default function BloomsTaxonomyGenerator({
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         course_id: parseInt(courseId),
-                        milestone_id: parseInt(selectedMilestoneId),
-                        num_questions: numQuestions,
-                        difficulty: difficulty,
-                        question_types: questionTypes,
-                        bloom_distribution: distribution,
+                        milestone_id: parseInt(mid),
+                        num_questions: nq,
+                        difficulty: diff,
+                        question_types: qt,
+                        bloom_distribution: dist,
                     }),
                     signal: controller.signal,
                 }
@@ -278,7 +305,7 @@ export default function BloomsTaxonomyGenerator({
 
             // After generation, trigger verification
             if (latestQuestions.length > 0) {
-                await verifyQuestions(latestQuestions);
+                await verifyQuestions(latestQuestions, mid);
             }
         } catch (err: any) {
             if (err.name !== "AbortError") {
@@ -291,13 +318,14 @@ export default function BloomsTaxonomyGenerator({
 
     // --- Verify Questions ---
     const verifyQuestions = useCallback(
-        async (questions: BloomsQuestion[]) => {
+        async (questions: BloomsQuestion[], milestoneOverride?: string) => {
+            const mid = milestoneOverride || selectedMilestoneId;
             setIsVerifying(true);
 
             try {
                 // First, extract content for verification context
                 const contentRes = await fetch(
-                    `${process.env.NEXT_PUBLIC_BACKEND_URL}/assessment/extract-content?course_id=${courseId}&milestone_id=${selectedMilestoneId}`,
+                    `${process.env.NEXT_PUBLIC_BACKEND_URL}/assessment/extract-content?course_id=${courseId}&milestone_id=${mid}`,
                     { method: "POST" }
                 );
 
@@ -498,7 +526,7 @@ export default function BloomsTaxonomyGenerator({
                                 {/* Scrollable Content */}
                                 <div className="flex-1 overflow-y-auto p-5 space-y-6">
                                     {/* Configuration Section */}
-                                    {generatedQuestions.length === 0 && (
+                                    {generatedQuestions.length === 0 && !autoStart && (
                                         <>
                                             {/* Module Selector */}
                                             <div>
@@ -876,7 +904,7 @@ export default function BloomsTaxonomyGenerator({
 
                                 {/* Footer */}
                                 <div className="p-5 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
-                                    {generatedQuestions.length === 0 ? (
+                                    {generatedQuestions.length === 0 && !autoStart ? (
                                         <>
                                             <button
                                                 onClick={onClose}

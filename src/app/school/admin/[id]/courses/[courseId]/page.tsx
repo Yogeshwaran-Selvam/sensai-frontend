@@ -670,7 +670,7 @@ export default function CreateCourse() {
         }
         setActiveQuestionId(questionId || null);
 
-        updateTaskAndQuestionIdInUrl(router, itemId, questionId);
+        updateTaskAndQuestionIdInUrl(router, itemId, questionId ?? null);
 
         // Ensure quiz items have questions property initialized
         if (item.type === 'quiz' && !item.questions) {
@@ -718,7 +718,7 @@ export default function CreateCourse() {
         // Only update URL if the questionId is different from current URL
         const currentQuestionId = searchParams.get('questionId');
         if (currentQuestionId !== questionId) {
-            updateTaskAndQuestionIdInUrl(router, activeItem?.id, questionId);
+            updateTaskAndQuestionIdInUrl(router, activeItem?.id ?? null, questionId);
         }
     };
 

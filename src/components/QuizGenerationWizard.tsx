@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { X, Sparkles, Plus, Brain } from "lucide-react";
+import { X, Sparkles, Plus, Brain, Theater } from "lucide-react";
+import BloomsTaxonomyGenerator from "./BloomsTaxonomyGenerator";
+import ScenarioModeGenerator from "./ScenarioModeGenerator";
 import {
     QuizPurpose,
     QuizDifficulty,
@@ -207,9 +209,11 @@ export default function QuizGenerationWizard({
     const [topics, setTopics] = useState<TopicWeight[]>([]);
     const [bloomsEnabled, setBloomsEnabled] = useState(false);
     const [bloomsDist, setBloomsDist] = useState<BloomsDistribution>(DEFAULT_BLOOMS_DISTRIBUTION);
-    const [isLoading, setIsLoading] = useState(false);
+    const [scenarioEnabled, setScenarioEnabled] = useState(false);
+    const [isGenerating, setIsGenerating] = useState(false);
     const [error, setError] = useState("");
-    const [generatingStep, setGeneratingStep] = useState("");
+    const [showBloomsPopup, setShowBloomsPopup] = useState(false);
+    const [showScenarioPopup, setShowScenarioPopup] = useState(false);
 
     const [isAddingCustom, setIsAddingCustom] = useState(false);
     const [customName, setCustomName] = useState("");
@@ -237,9 +241,12 @@ export default function QuizGenerationWizard({
         setQuestionType("objective");
         setAnswerType("mcq");
         setError("");
-        setIsLoading(false);
         setBloomsEnabled(false);
         setBloomsDist(DEFAULT_BLOOMS_DISTRIBUTION);
+        setScenarioEnabled(false);
+        setIsGenerating(false);
+        setShowBloomsPopup(false);
+        setShowScenarioPopup(false);
         setIsAddingCustom(false);
         setCustomName("");
 
@@ -335,54 +342,61 @@ export default function QuizGenerationWizard({
     const bloomsTotal = Object.values(bloomsDist).reduce((s, v) => s + v, 0);
     const totalWeight = topics.reduce((s, t) => s + t.weight, 0);
 
-    const handleGenerate = async () => {
-        if (topics.length === 0) { setError("Add at least one topic"); return; }
+const handleGenerate = async () => {
+        if (!bloomsEnabled && !scenarioEnabled && topics.length === 0) { setError("Add at least one topic"); return; }
         if (bloomsEnabled && bloomsTotal !== 100) { setError("Bloom's distribution must sum to 100%"); return; }
 
         setError("");
-        setIsLoading(true);
-        setGeneratingStep("Generating questions with AI...");
+        setIsGenerating(true);
 
         try {
-            const payload = {
-                course_title: courseTitle,
-                module_title: moduleTitle,
-                purpose,
-                length,
-                difficulty,
-                question_type: questionType,
-                answer_type: answerType,
-                topic_weights: topics.map((t) => ({ keyword: t.keyword, weight: t.weight })),
-                bloom_distribution: bloomsEnabled ? bloomsDist : null,
-                course_id: courseId,
-                org_id: orgId,
-            };
-
-            const res = await fetch(
-                `${process.env.NEXT_PUBLIC_BACKEND_URL}/quiz-generation/generate-questions`,
-                { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }
-            );
-
-            if (!res.ok) {
-                const errData = await res.json().catch(() => ({}));
-                throw new Error(errData.detail || `Request failed (${res.status})`);
+            if (bloomsEnabled) {
+                onClose();                  // slide away the wizard first
+                setShowBloomsPopup(true);
+                setIsGenerating(false);
+                return;
             }
 
-            setGeneratingStep("Verifying & adding to quiz...");
-            const data = await res.json();
+            if (scenarioEnabled) {
+                onClose();                  // slide away the wizard first
+                setShowScenarioPopup(true);
+                setIsGenerating(false);
+                return;
+            }
 
-            // Attach regen metadata so QuizEditor can refresh "wrong" questions
-            const regenMeta = { difficulty, question_type: questionType, answer_type: answerType, course_title: courseTitle, module_title: moduleTitle };
-            const questionsWithMeta = (data.questions || []).map((q: any) => ({ ...q, _regen_meta: regenMeta }));
-
-            onAddQuestions?.(questionsWithMeta);
-            onGenerate?.(payload as any);
-            onClose();
+            {
+                // ── Topic-based generation (default) ──────────────────────
+                const payload = {
+                    course_title: courseTitle,
+                    module_title: moduleTitle,
+                    purpose,
+                    length,
+                    difficulty,
+                    question_type: questionType,
+                    answer_type: answerType,
+                    topic_weights: topics.map((t) => ({ keyword: t.keyword, weight: t.weight })),
+                    bloom_distribution: null,
+                    course_id: courseId,
+                    org_id: orgId,
+                };
+                const res = await fetch(
+                    `${process.env.NEXT_PUBLIC_BACKEND_URL}/quiz-generation/generate-questions`,
+                    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }
+                );
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    throw new Error(errData.detail || `Request failed (${res.status})`);
+                }
+                const data = await res.json();
+                const questionsWithMeta = (data.questions || []).map((q: any) => ({ ...q, _regen_meta: regenMeta }));
+                onAddQuestions?.(questionsWithMeta);
+                onGenerate?.(payload as any);
+                onClose();
+            }
         } catch (err: any) {
             setError(err.message || "Failed to generate questions");
         } finally {
-            setIsLoading(false);
-            setGeneratingStep("");
+            setIsGenerating(false);
         }
     };
 
@@ -393,7 +407,7 @@ export default function QuizGenerationWizard({
                 className={`fixed inset-0 bg-black/40 z-[65] transition-opacity duration-300 ${
                     open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
                 }`}
-                onClick={isLoading ? undefined : onClose}
+                onClick={isGenerating ? undefined : onClose}
             />
 
             {/* Drawer */}
@@ -417,7 +431,7 @@ export default function QuizGenerationWizard({
                                 )}
                             </div>
                         </div>
-                        {!isLoading && (
+                        {!isGenerating && (
                             <button
                                 onClick={onClose}
                                 className="p-1.5 rounded-md text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors shrink-0"
@@ -427,31 +441,9 @@ export default function QuizGenerationWizard({
                         )}
                     </div>
 
-                    {/* Generating overlay */}
-                    {isLoading && (
-                        <div className="flex-1 flex flex-col items-center justify-center gap-5 px-6">
-                            <div className="w-14 h-14 rounded-full bg-purple-500/10 flex items-center justify-center">
-                                <Sparkles className="w-7 h-7 text-purple-400 animate-pulse" />
-                            </div>
-                            <div className="text-center space-y-1">
-                                <p className="text-white font-medium">AI is working...</p>
-                                <p className="text-sm text-zinc-400">{generatingStep}</p>
-                            </div>
-                            <div className="flex gap-1">
-                                {[0, 1, 2].map((i) => (
-                                    <div key={i} className="w-2 h-2 rounded-full bg-purple-500 animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />
-                                ))}
-                            </div>
-                            <p className="text-xs text-zinc-500 text-center max-w-xs">
-                                Generating {length} questions then verifying — may take up to 30 seconds.
-                            </p>
-                        </div>
-                    )}
-
                     {/* Config body */}
-                    {!isLoading && (
-                        <>
-                            <div className="flex-1 overflow-y-auto px-5 py-5 space-y-6">
+                    <>
+                        <div className="flex-1 overflow-y-auto px-5 py-5 space-y-6">
 
                                 <ToggleGroup
                                     label="Purpose"
@@ -569,7 +561,7 @@ export default function QuizGenerationWizard({
                                 {/* Bloom's Taxonomy Toggle */}
                                 <div>
                                     <button
-                                        onClick={() => setBloomsEnabled((v) => !v)}
+                                        onClick={() => { setBloomsEnabled((v) => !v); setScenarioEnabled(false); }}
                                         className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 transition-colors"
                                     >
                                         <div className="flex items-center gap-2">
@@ -612,6 +604,30 @@ export default function QuizGenerationWizard({
                                     )}
                                 </div>
 
+                                <div className="border-t border-zinc-800" />
+
+                                {/* Scenario Mode Toggle */}
+                                <div>
+                                    <button
+                                        onClick={() => { setScenarioEnabled((v) => !v); setBloomsEnabled(false); }}
+                                        className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 transition-colors"
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <Theater className="w-4 h-4 text-amber-400" />
+                                            <span className="text-sm font-medium text-zinc-200">Scenario Mode</span>
+                                            <span className="text-xs text-zinc-500">narrative-based questions</span>
+                                        </div>
+                                        <div className={`w-9 h-5 rounded-full transition-colors flex items-center px-0.5 shrink-0 ${scenarioEnabled ? 'bg-amber-500' : 'bg-zinc-600'}`}>
+                                            <div className={`w-4 h-4 rounded-full bg-white transition-transform duration-200 ${scenarioEnabled ? 'translate-x-4' : 'translate-x-0'}`} />
+                                        </div>
+                                    </button>
+                                    {scenarioEnabled && (
+                                        <p className="mt-2 text-xs text-zinc-500 px-1">
+                                            AI will craft a real-world scenario from your course content and generate questions within that context. Topic weights are not used in scenario mode.
+                                        </p>
+                                    )}
+                                </div>
+
                                 {error && (
                                     <p className="text-sm text-red-400 bg-red-500/10 rounded-lg px-3 py-2">{error}</p>
                                 )}
@@ -621,17 +637,108 @@ export default function QuizGenerationWizard({
                             <div className="px-5 py-4 border-t border-zinc-800 shrink-0">
                                 <button
                                     onClick={handleGenerate}
-                                    disabled={topics.length === 0}
-                                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium bg-purple-600 text-white hover:bg-purple-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-purple-600/20"
+                                    disabled={isGenerating || (!bloomsEnabled && !scenarioEnabled && topics.length === 0)}
+                                    className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg ${
+                                        bloomsEnabled
+                                            ? 'bg-blue-600 hover:bg-blue-500 shadow-blue-600/20'
+                                            : scenarioEnabled
+                                                ? 'bg-amber-500 hover:bg-amber-400 shadow-amber-500/20'
+                                                : 'bg-purple-600 hover:bg-purple-500 shadow-purple-600/20'
+                                    }`}
                                 >
-                                    <Sparkles className="w-4 h-4" />
-                                    Generate
+                                    {isGenerating ? (
+                                        <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                                        </svg>
+                                    ) : bloomsEnabled ? (
+                                        <Brain className="w-4 h-4" />
+                                    ) : scenarioEnabled ? (
+                                        <Theater className="w-4 h-4" />
+                                    ) : (
+                                        <Sparkles className="w-4 h-4" />
+                                    )}
+                                    {isGenerating
+                                        ? 'Generating...'
+                                        : bloomsEnabled
+                                            ? "Generate with Bloom's"
+                                            : scenarioEnabled
+                                                ? 'Generate Scenario'
+                                                : 'Generate'}
                                 </button>
                             </div>
                         </>
-                    )}
                 </div>
             </div>
+
+            {/* Bloom's results popup — wizard already closed, popup lives independently */}
+            <BloomsTaxonomyGenerator
+                open={showBloomsPopup}
+                onClose={() => setShowBloomsPopup(false)}
+                onAddQuestions={(questions) => {
+                    const regenMeta = { difficulty, question_type: questionType, answer_type: answerType, course_title: courseTitle, module_title: moduleTitle };
+                    const formatted = questions.map((q: any) => ({
+                        question_text: q.question_text,
+                        topic: q.blooms_level || "Bloom's",
+                        blooms_level: q.blooms_level || "",
+                        options: q.options || null,
+                        correct_answer: q.correct_answer,
+                        explanation: q.explanation || "",
+                        difficulty: q.difficulty || difficulty,
+                        question_type: q.question_type || questionType,
+                        verification_status: q.verification_status || "pending",
+                        verification_reason: q.verification_reason || "",
+                        _regen_meta: regenMeta,
+                    }));
+                    onAddQuestions?.(formatted);
+                    setShowBloomsPopup(false);
+                }}
+                courseId={String(courseId)}
+                milestoneId={milestoneId}
+                milestones={[]}
+                autoStart={true}
+                autoParams={{
+                    milestoneId,
+                    numQuestions: length,
+                    difficulty,
+                    questionTypes: [questionType],
+                    bloomDistribution: bloomsDist,
+                }}
+            />
+
+            {/* Scenario results popup — wizard already closed, popup lives independently */}
+            <ScenarioModeGenerator
+                open={showScenarioPopup}
+                onClose={() => setShowScenarioPopup(false)}
+                onAddQuestions={(questions) => {
+                    const regenMeta = { difficulty, question_type: questionType, answer_type: answerType, course_title: courseTitle, module_title: moduleTitle };
+                    const formatted = questions.map((q: any) => ({
+                        question_text: q.question_text,
+                        topic: q.concept_tested || "Scenario",
+                        blooms_level: "",
+                        options: q.options || null,
+                        correct_answer: q.correct_answer,
+                        explanation: q.explanation || "",
+                        difficulty: q.difficulty || difficulty,
+                        question_type: q.question_type || questionType,
+                        verification_status: q.verification_status || "pending",
+                        verification_reason: q.verification_reason || "",
+                        _regen_meta: regenMeta,
+                    }));
+                    onAddQuestions?.(formatted);
+                    setShowScenarioPopup(false);
+                }}
+                courseId={String(courseId)}
+                milestoneId={milestoneId}
+                milestones={[]}
+                autoStart={true}
+                autoParams={{
+                    milestoneId,
+                    numQuestions: length,
+                    difficulty,
+                    questionTypes: [questionType],
+                }}
+            />
         </>
     );
 }
