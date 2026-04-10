@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Header } from "@/components/layout/header";
-import { Edit, Save, Users, BookOpen, Layers, Building, ChevronDown, Trash2, ExternalLink, Briefcase, Loader2 } from "lucide-react";
+import { Edit, Save, Users, BookOpen, Layers, Building, ChevronDown, Trash2, ExternalLink, Briefcase, Loader2, BarChart3 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -11,6 +11,8 @@ import CohortCard from "@/components/CohortCard";
 import InviteMembersDialog from "@/components/InviteMembersDialog";
 import CreateCohortDialog from "@/components/CreateCohortDialog";
 import CreateCourseDialog from '@/components/CreateCourseDialog';
+import RecruiterMCQGenerator from '@/components/curate/RecruiterMCQGenerator';
+import RecruiterDashboard from '@/components/curate/RecruiterDashboard';
 import Toast from "@/components/Toast";
 import ConfirmationDialog from "@/components/ConfirmationDialog";
 import { Cohort, TeamMember, Course } from "@/types";
@@ -776,11 +778,31 @@ export default function ClientSchoolAdminView({ id }: { id: string }) {
                                     )}
 
                                     {!loadingJDs && !jdError && jobDescriptions.length === 0 && (
-                                        <div className="flex flex-col items-center justify-center py-20">
-                                            <h2 className="text-4xl font-light mb-4">No job descriptions yet</h2>
-                                            <p className="text-gray-600 dark:text-gray-400 mb-8">Add courses with learning materials to auto-generate relevant job descriptions</p>
+                                        <div className="flex flex-col items-center justify-center py-10">
+                                            <h2 className="text-2xl font-light mb-2">No suggested job descriptions yet</h2>
+                                            <p className="text-gray-600 dark:text-gray-400">Add courses with learning materials to auto-generate relevant job descriptions, or use the options below with your own JD.</p>
                                         </div>
                                     )}
+
+                                    {/* Recruiter MCQ / code / text generator — the 3 flows */}
+                                    <RecruiterMCQGenerator
+                                        orgId={school.id}
+                                        suggestedJDs={jobDescriptions}
+                                    />
+
+                                    {/* Recruiter Dashboard — published tests & candidate results */}
+                                    <div className="mt-12 pt-8 border-t border-gray-200 dark:border-gray-800">
+                                        <div className="flex items-center mb-6">
+                                            <BarChart3 size={20} className="mr-2 text-purple-600 dark:text-purple-400" />
+                                            <h3 className="text-xl font-light text-black dark:text-white">
+                                                Candidate Results Dashboard
+                                            </h3>
+                                            <span className="ml-3 text-sm text-gray-500 dark:text-gray-400">
+                                                Track scores, review answers
+                                            </span>
+                                        </div>
+                                        <RecruiterDashboard orgId={school.id} />
+                                    </div>
                                 </div>
                             )}
 
