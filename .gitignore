@@ -52,3 +52,5 @@ next-env.d.ts
 /codecov
 # Sentry Config File
 .env.sentry-build-plugin
+
+package-lock.json

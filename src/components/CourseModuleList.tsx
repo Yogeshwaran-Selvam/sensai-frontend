@@ -31,6 +31,7 @@ interface CourseModuleListProps {
     completedQuestionIds?: Record<string, Record<string, boolean>>; // Add prop for partially completed quiz questions
     schoolId?: string; // Add school ID for fetching scorecards
     courseId?: string; // Add courseId for fetching learning materials
+    courseTitle?: string; // Course title forwarded to quiz generation wizard
 
     // Dialog-related props
     isDialogOpen?: boolean;
@@ -74,6 +75,7 @@ export default function CourseModuleList({
     completedQuestionIds = {}, // Default empty object for completed question IDs
     schoolId,
     courseId,
+    courseTitle,
 
     // Dialog-related props
     isDialogOpen = false,
@@ -1270,6 +1272,8 @@ export default function CourseModuleList({
                 focusEditor={focusEditor}
                 schoolId={schoolId}
                 courseId={courseId}
+                courseTitle={courseTitle}
+                moduleTitle={modules.find((m) => m.id === activeModuleId)?.title ?? ""}
             />
 
             {/* Module deletion confirmation dialog */}
