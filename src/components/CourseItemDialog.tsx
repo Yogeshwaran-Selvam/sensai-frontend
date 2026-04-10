@@ -1348,8 +1348,10 @@ const CourseItemDialog: React.FC<CourseItemDialogProps> = ({
                 onClose={() => setShowQuizWizard(false)}
                 courseId={Number(courseId)}
                 orgId={Number(schoolId)}
+                milestoneId={activeModuleId || undefined}
                 courseTitle={courseTitle}
                 moduleTitle={moduleTitle}
+                onAddQuestions={(questions) => quizEditorRef.current?.addGeneratedQuestions(questions)}
             />
         </>
     );

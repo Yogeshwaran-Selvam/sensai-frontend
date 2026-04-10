@@ -3,7 +3,7 @@
 import "@blocknote/core/fonts/inter.css";
 import "@blocknote/mantine/style.css";
 import { useState, useEffect, useRef, useCallback, useMemo, forwardRef, useImperativeHandle } from "react";
-import { Plus, FileText, Trash2, Check, HelpCircle, Pen, ClipboardCheck, BookOpen, Code, Sparkles, Tag } from "lucide-react";
+import { Plus, FileText, Trash2, Check, HelpCircle, Pen, ClipboardCheck, BookOpen, Code, Sparkles, Tag, RefreshCw, CheckCircle2, AlertCircle, XCircle } from "lucide-react";
 
 // Add custom styles for dark mode
 import "./editor-styles.css";
@@ -946,6 +946,168 @@ const QuizEditor = forwardRef<QuizEditorHandle, QuizEditorProps>(({
         setShowToast(true);
     }, [questions, onChange]);
 
+    // Handle AI-generated questions from the Quiz Generation Wizard (stores topic + verification metadata)
+    const handleGeneratedQuestionsAdd = useCallback((generatedQuestions: any[]) => {
+        const newQuizQuestions: QuizQuestion[] = generatedQuestions.map((q, idx) => {
+            const questionContent: any[] = [
+                { type: "paragraph", content: [{ type: "text", text: q.question_text, styles: {} }] },
+            ];
+
+            if (q.options && q.options.length > 0) {
+                q.options.forEach((opt: string, i: number) => {
+                    questionContent.push({
+                        type: "paragraph",
+                        content: [{ type: "text", text: `${String.fromCharCode(65 + i)}. ${opt}`, styles: {} }],
+                    });
+                });
+            }
+
+            const correctAnswerBlocks = [
+                {
+                    type: "paragraph",
+                    content: [{
+                        type: "text",
+                        text: q.correct_answer + (q.explanation ? `\n\nExplanation: ${q.explanation}` : ""),
+                        styles: {},
+                    }],
+                },
+            ];
+
+            const bloomLabel = q.blooms_level ? q.blooms_level.charAt(0).toUpperCase() + q.blooms_level.slice(1) : "";
+
+            return {
+                id: `gen-${Date.now()}-${idx}`,
+                content: questionContent,
+                config: {
+                    ...defaultQuestionConfig,
+                    questionType: (q.question_type === "subjective" ? "subjective" : "objective") as 'objective' | 'subjective',
+                    inputType: 'text' as const,
+                    responseType: 'chat' as const,
+                    correctAnswer: correctAnswerBlocks,
+                    title: `${q.topic ? `[${q.topic}] ` : ""}${q.question_text.substring(0, 55)}${q.question_text.length > 55 ? "..." : ""}`,
+                    settings: {
+                        allowCopyPaste: true,
+                        ai_topic: q.topic || "",
+                        ai_verification_status: q.verification_status || "pending",
+                        ai_verification_reason: q.verification_reason || "",
+                        ai_blooms_level: q.blooms_level || "",
+                        // regen metadata
+                        ai_regen_difficulty: q._regen_meta?.difficulty || "medium",
+                        ai_regen_question_type: q._regen_meta?.question_type || "objective",
+                        ai_regen_answer_type: q._regen_meta?.answer_type || "mcq",
+                        ai_regen_course_title: q._regen_meta?.course_title || "",
+                        ai_regen_module_title: q._regen_meta?.module_title || "",
+                    },
+                },
+            };
+        });
+
+        const updatedQuestions = [...questions, ...newQuizQuestions];
+        setQuestions(updatedQuestions);
+        setCurrentQuestionIndex(updatedQuestions.length - newQuizQuestions.length);
+        setNewQuestionAdded(true);
+        setQuestionCountHighlighted(true);
+
+        if (onChange) onChange(updatedQuestions);
+
+        const wrongCount = generatedQuestions.filter((q) => q.verification_status === 'wrong').length;
+        setToastTitle("Questions Added");
+        setToastMessage(`${newQuizQuestions.length} AI questions added${wrongCount > 0 ? ` · ${wrongCount} flagged as wrong` : " · all verified"}`);
+        setToastEmoji("✨");
+        setShowToast(true);
+    }, [questions, onChange]);
+
+    // Regenerate a single "wrong" AI question in-place
+    const handleRegenerateQuestion = useCallback(async (questionIndex: number) => {
+        const question = questions[questionIndex];
+        const s = question.config.settings as any;
+        if (!s?.ai_topic) return;
+
+        setQuestions((prev) => {
+            const updated = [...prev];
+            updated[questionIndex] = {
+                ...updated[questionIndex],
+                config: {
+                    ...updated[questionIndex].config,
+                    settings: { ...updated[questionIndex].config.settings, _regenerating: true },
+                },
+            };
+            return updated;
+        });
+
+        try {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/quiz-generation/regenerate-question`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    topic: s.ai_topic,
+                    blooms_level: s.ai_blooms_level,
+                    course_title: s.ai_regen_course_title,
+                    module_title: s.ai_regen_module_title,
+                    difficulty: s.ai_regen_difficulty,
+                    question_type: s.ai_regen_question_type,
+                    answer_type: s.ai_regen_answer_type,
+                }),
+            });
+
+            if (!res.ok) throw new Error("Failed");
+            const q = await res.json();
+
+            const questionContent: any[] = [
+                { type: "paragraph", content: [{ type: "text", text: q.question_text, styles: {} }] },
+            ];
+            if (q.options?.length > 0) {
+                q.options.forEach((opt: string, i: number) => {
+                    questionContent.push({
+                        type: "paragraph",
+                        content: [{ type: "text", text: `${String.fromCharCode(65 + i)}. ${opt}`, styles: {} }],
+                    });
+                });
+            }
+
+            const correctAnswerBlocks = [{
+                type: "paragraph",
+                content: [{
+                    type: "text",
+                    text: q.correct_answer + (q.explanation ? `\n\nExplanation: ${q.explanation}` : ""),
+                    styles: {},
+                }],
+            }];
+
+            setQuestions((prev) => {
+                const updated = [...prev];
+                updated[questionIndex] = {
+                    ...updated[questionIndex],
+                    content: questionContent,
+                    config: {
+                        ...updated[questionIndex].config,
+                        correctAnswer: correctAnswerBlocks,
+                        title: `${q.topic ? `[${q.topic}] ` : ""}${q.question_text.substring(0, 55)}${q.question_text.length > 55 ? "..." : ""}`,
+                        settings: {
+                            ...updated[questionIndex].config.settings,
+                            ai_verification_status: q.verification_status || "pending",
+                            ai_verification_reason: q.verification_reason || "",
+                            _regenerating: false,
+                        },
+                    },
+                };
+                return updated;
+            });
+        } catch {
+            setQuestions((prev) => {
+                const updated = [...prev];
+                updated[questionIndex] = {
+                    ...updated[questionIndex],
+                    config: {
+                        ...updated[questionIndex].config,
+                        settings: { ...updated[questionIndex].config.settings, _regenerating: false },
+                    },
+                };
+                return updated;
+            });
+        }
+    }, [questions]);
+
     // Add a new question
     const addQuestion = useCallback(() => {
         if (checkUnsavedScorecardChanges()) {
@@ -1519,7 +1681,8 @@ const QuizEditor = forwardRef<QuizEditorHandle, QuizEditorProps>(({
             return currentQuestionsStr !== originalQuestionsStr;
         },
         hasUnsavedScorecardChanges: () => scorecardManagerRef.current?.hasUnsavedScorecardChanges() ?? false,
-        handleScorecardChangesRevert: () => scorecardManagerRef.current?.handleScorecardChangesRevert()
+        handleScorecardChangesRevert: () => scorecardManagerRef.current?.handleScorecardChangesRevert(),
+        addGeneratedQuestions: (generatedQuestions: any[]) => handleGeneratedQuestionsAdd(generatedQuestions),
     }));
 
     // Update the MemoizedLearnerQuizView to include the correct answer
@@ -1945,69 +2108,116 @@ const QuizEditor = forwardRef<QuizEditorHandle, QuizEditorProps>(({
 
                                     {/* Questions List */}
                                     <div className="flex-1 overflow-y-auto">
-                                        {questions.map((question, index) => (
-                                            <div
-                                                key={question.id}
-                                                className={`px-4 py-3 cursor-pointer flex items-center justify-between group border-l-2 ${index === currentQuestionIndex
-                                                    ? "bg-gray-200 border-green-500 dark:bg-[#222222]"
-                                                    : "hover:bg-gray-100 border-transparent dark:hover:bg-[#1A1A1A]"
-                                                    }`}
-                                                onClick={() => {
-                                                    if (checkUnsavedScorecardChanges()) {
-                                                        pendingScorecardActionRef.current = () => {
+                                        {(() => {
+                                            const elements: React.ReactNode[] = [];
+                                            let lastTopic: string | null = null;
+
+                                            questions.forEach((question, index) => {
+                                                const s = question.config.settings as any;
+                                                const aiTopic: string | undefined = s?.ai_topic;
+                                                const aiStatus: string | undefined = s?.ai_verification_status;
+                                                const isRegenerating: boolean = !!s?._regenerating;
+
+                                                // Topic section header for AI questions
+                                                if (aiTopic && aiTopic !== lastTopic) {
+                                                    lastTopic = aiTopic;
+                                                    elements.push(
+                                                        <div key={`topic-${aiTopic}-${index}`} className="px-3 pt-3 pb-1 flex items-center gap-1.5">
+                                                            <span className="text-[10px] font-semibold uppercase tracking-wider text-purple-400">{aiTopic}</span>
+                                                            <div className="flex-1 h-px bg-purple-400/20" />
+                                                        </div>
+                                                    );
+                                                } else if (!aiTopic) {
+                                                    lastTopic = null;
+                                                }
+
+                                                // Status badge for AI questions
+                                                const statusDot = aiStatus ? (
+                                                    <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${
+                                                        aiStatus === 'verified' ? 'bg-emerald-400' :
+                                                        aiStatus === 'wrong'    ? 'bg-red-400' :
+                                                        'bg-amber-400'
+                                                    }`} title={
+                                                        aiStatus === 'verified' ? 'AI Verified' :
+                                                        aiStatus === 'wrong'    ? 'Spotted Wrong' :
+                                                        'Pending'
+                                                    } />
+                                                ) : null;
+
+                                                elements.push(
+                                                    <div
+                                                        key={question.id}
+                                                        className={`px-4 py-3 cursor-pointer flex items-center justify-between group border-l-2 ${index === currentQuestionIndex
+                                                            ? "bg-gray-200 border-green-500 dark:bg-[#222222]"
+                                                            : "hover:bg-gray-100 border-transparent dark:hover:bg-[#1A1A1A]"
+                                                            }`}
+                                                        onClick={() => {
+                                                            if (checkUnsavedScorecardChanges()) {
+                                                                pendingScorecardActionRef.current = () => {
+                                                                    setCurrentQuestionIndex(index);
+                                                                    setActiveEditorTab('question');
+                                                                    if (onQuestionChange && !isPreviewMode) onQuestionChange(question.id);
+                                                                };
+                                                                if (onQuestionChangeWithUnsavedScorecardChanges) onQuestionChangeWithUnsavedScorecardChanges();
+                                                                return;
+                                                            }
                                                             setCurrentQuestionIndex(index);
                                                             setActiveEditorTab('question');
-                                                            if (onQuestionChange && !isPreviewMode) {
-                                                                onQuestionChange(question.id);
-                                                            }
-                                                        };
-                                                        if (onQuestionChangeWithUnsavedScorecardChanges) {
-                                                            onQuestionChangeWithUnsavedScorecardChanges();
-                                                        }
-                                                        return;
-                                                    }
-
-                                                    setCurrentQuestionIndex(index);
-                                                    setActiveEditorTab('question');
-                                                    if (onQuestionChange && !isPreviewMode) {
-                                                        onQuestionChange(question.id);
-                                                    }
-                                                }}
-                                            >
-                                                <div className="flex items-center flex-1 min-w-0">
-                                                    <div className="flex-1 min-w-0">
-                                                        <div
-                                                            className={`text-sm break-words whitespace-normal ${index === currentQuestionIndex 
-                                                                ? "text-black dark:text-white" 
-                                                                : "text-gray-700 dark:text-gray-300"}`}
-                                                            data-testid="sidebar-question-label"
-                                                        >
-                                                            {question.config.title || `Question ${index + 1}`}
+                                                            if (onQuestionChange && !isPreviewMode) onQuestionChange(question.id);
+                                                        }}
+                                                    >
+                                                        <div className="flex items-center flex-1 min-w-0 gap-2">
+                                                            {statusDot}
+                                                            <div className="flex-1 min-w-0">
+                                                                <div
+                                                                    className={`text-sm break-words whitespace-normal ${index === currentQuestionIndex
+                                                                        ? "text-black dark:text-white"
+                                                                        : "text-gray-700 dark:text-gray-300"}`}
+                                                                    data-testid="sidebar-question-label"
+                                                                >
+                                                                    {question.config.title || `Question ${index + 1}`}
+                                                                </div>
+                                                                <div className={`text-xs truncate ${index === currentQuestionIndex
+                                                                    ? "text-gray-600 dark:text-gray-300"
+                                                                    : "text-gray-500"
+                                                                    }`}>
+                                                                    {question.config.responseType === 'chat' ? 'Practice' : 'Exam'} • {question.config.questionType === 'objective' ? 'Objective' : 'Subjective'} • {question.config.inputType}
+                                                                    {aiStatus === 'verified' && <span className="ml-1 text-emerald-500">· AI Verified</span>}
+                                                                    {aiStatus === 'wrong'    && <span className="ml-1 text-red-400">· Spotted Wrong</span>}
+                                                                    {aiStatus === 'pending'  && <span className="ml-1 text-amber-400">· Pending</span>}
+                                                                </div>
+                                                            </div>
                                                         </div>
-                                                        <div className={`text-xs truncate ${index === currentQuestionIndex 
-                                                            ? "text-gray-600 dark:text-gray-300"
-                                                            : "text-gray-500"
-                                                            }`}>
-                                                            {question.config.responseType === 'chat' ? 'Practice' : 'Exam'} • {question.config.questionType === 'objective' ? 'Objective' : 'Subjective'} • {question.config.inputType}
+
+                                                        <div className="flex items-center gap-1 shrink-0">
+                                                            {/* Refresh button for "wrong" AI questions */}
+                                                            {!readOnly && status === 'draft' && aiStatus === 'wrong' && (
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); handleRegenerateQuestion(index); }}
+                                                                    disabled={isRegenerating}
+                                                                    title="Regenerate this question"
+                                                                    className="p-1 text-amber-400 hover:text-amber-300 hover:bg-zinc-700 rounded-md transition-colors"
+                                                                >
+                                                                    <RefreshCw size={12} className={isRegenerating ? 'animate-spin' : ''} />
+                                                                </button>
+                                                            )}
+                                                            {/* Delete button */}
+                                                            {!readOnly && status === 'draft' && index === currentQuestionIndex && (
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); setShowDeleteConfirm(true); }}
+                                                                    className="opacity-0 cursor-pointer group-hover:opacity-100 p-1 text-red-400 hover:text-red-300 transition-all duration-200"
+                                                                    aria-label="Delete question"
+                                                                >
+                                                                    <Trash2 size={16} />
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     </div>
-                                                </div>
+                                                );
+                                            });
 
-                                                {/* Delete button - only show for current question and when not readonly */}
-                                                {!readOnly && status === 'draft' && index === currentQuestionIndex && (
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setShowDeleteConfirm(true);
-                                                        }}
-                                                        className="opacity-0 cursor-pointer group-hover:opacity-100 ml-2 p-1 text-red-400 hover:text-red-300 transition-all duration-200"
-                                                        aria-label="Delete question"
-                                                    >
-                                                        <Trash2 size={16} />
-                                                    </button>
-                                                )}
-                                            </div>
-                                        ))}
+                                            return elements;
+                                        })()}
                                     </div>
                                 </div>
 

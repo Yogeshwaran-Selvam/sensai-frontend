@@ -34,6 +34,7 @@ interface CourseDetails {
 
 // Default configuration for new questions
 const defaultQuestionConfig: QuizQuestionConfig = {
+    title: 'New Question',
     inputType: 'text',
     responseType: 'chat',
     questionType: 'objective',

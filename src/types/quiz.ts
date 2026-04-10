@@ -25,6 +25,7 @@ export interface QuizEditorHandle {
     ) => boolean;
     hasUnsavedScorecardChanges: () => boolean;
     handleScorecardChangesRevert: () => void;
+    addGeneratedQuestions: (questions: any[]) => void;
 }
 
 export interface QuizQuestionConfig {
